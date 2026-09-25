@@ -8,7 +8,7 @@ enum Setup {
         var p: [String] = []
         if FaceStore.shared.profiles.isEmpty { p.append("Set up a face (Faces tab)") }
         if !Keychain.exists { p.append("Save your Mac password (Password tab)") }
-        else if !Keychain.accessGranted { p.append("Allow access to your saved password") }
+        else if !Keychain.accessGranted { p.append("Re-enter your password after the update") }
         if Camera.authorization != .authorized { p.append("Allow Camera (Settings tab)") }
         if !Unlocker.hasAccessibility { p.append("Allow Accessibility (Settings tab)") }
         return p
@@ -53,7 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             DispatchQueue.main.async { self.askForKeychainAccess() }
         }
 
-        let problems = Setup.problems.filter { !$0.hasPrefix("Allow access") }
+        let problems = Setup.problems.filter { !$0.hasPrefix("Re-enter your password") }
         if !problems.isEmpty {
             Log.write("Setup incomplete: \(problems.joined(separator: "; "))")
         }
@@ -152,7 +152,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(status)
         } else {
             for problem in problems {
-                let action = problem.hasPrefix("Allow access") ? #selector(askForKeychainAccess) : #selector(openSettings)
+                let action = problem.hasPrefix("Re-enter your password") ? #selector(askForKeychainAccess) : #selector(openSettings)
                 menu.addItem(item("⚠︎ " + problem, action))
             }
         }
@@ -204,34 +204,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         settingsWindow?.orderFrontRegardless()
     }
 
-    /// After an update macOS needs one approval before this build may read the saved password.
+    /// After an update this build can't read the old saved password without a macOS prompt (which can't
+    /// be answered at the lock screen), so ask for the password once and save a fresh copy instead.
     @objc func askForKeychainAccess() {
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         let alert = NSAlert()
-        alert.messageText = "Allow Glimpse to use your saved password"
-        alert.informativeText = """
-        Glimpse was updated, so macOS needs to confirm it can still read the password you saved.
-
-        Next, macOS will ask for your login keychain password. Type your Mac login password and click "Always Allow" (not just "Allow").
-
-        If that doesn't work, choose "Enter Password Again" instead.
-        """
-        alert.addButton(withTitle: "Continue")
-        alert.addButton(withTitle: "Enter Password Again")
+        alert.messageText = "Enter your Mac password to finish updating Glimpse"
+        alert.informativeText = "Glimpse was updated, so it needs to save your password again. It's kept only in your login Keychain on this Mac."
+        let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
+        field.placeholderString = "Mac login password"
+        alert.accessoryView = field
+        alert.addButton(withTitle: "Save")
         alert.addButton(withTitle: "Later")
-        switch alert.runModal() {
-        case .alertFirstButtonReturn:
-            if !Keychain.requestAccess() {
-                let fail = NSAlert()
-                fail.messageText = "Access wasn't allowed"
-                fail.informativeText = "No problem — enter your Mac password again in the Password tab and Glimpse will save a fresh copy."
-                fail.runModal()
-                openSettings()
-            }
-        case .alertSecondButtonReturn:
-            openSettings()
-        default:
-            break
+        alert.window.initialFirstResponder = field
+        while alert.runModal() == .alertFirstButtonReturn {
+            let pw = field.stringValue
+            field.stringValue = ""
+            if PasswordVerifier.verify(pw), Keychain.save(pw) { return }
+            alert.informativeText = "That isn't the password for \(NSUserName()). Please try again."
         }
     }
 

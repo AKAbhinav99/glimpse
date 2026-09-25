@@ -36,14 +36,11 @@ osascript -e 'quit app "Glimpse"' 2>/dev/null; curl -fL -o /tmp/Glimpse.dmg http
 
 Your faces and settings are kept when you update.
 
-### After an update: allow access to your saved password
+### After an update: re-enter your password once
 
-Glimpse isn't signed with a paid Apple Developer ID, so macOS links your saved password to the exact version of the app that saved it. After each update, Glimpse shows **"Allow Glimpse to use your saved password"** once:
+Glimpse isn't signed with a paid Apple Developer ID, so macOS links your saved password to the exact version of the app that saved it. After each update, Glimpse asks **"Enter your Mac password to finish updating Glimpse"** once. Type your Mac password and click **Save**. It saves a fresh copy that the new version can read without any macOS prompts.
 
-- **Enter Password Again** (easiest): type your Mac password in the **Password** tab and click **Replace**.
-- **Continue**: macOS asks for your login keychain password. Type your Mac password and click **Always Allow** (not just *Allow*).
-
-Until you do one of these, Glimpse won't try to unlock, and it never shows Keychain prompts in the background or at the lock screen. You can also do this later from the menu bar icon (**⚠︎ Allow access to your saved password**).
+Until you do this, Glimpse won't try to unlock. It never shows Keychain prompts in the background or at the lock screen. You can also do it later from the menu bar icon (**⚠︎ Re-enter your password after the update**) or the **Password** tab.
 
 ### Opening Settings
 
@@ -146,7 +143,7 @@ Dynamic Island animation     Unlocker types your password
 
 Please read this before using it.
 
-- **Your password:** apps like this all need your password, because typing it is the only way to unlock. Glimpse stores it only in **your login Keychain**, limited to this app's code signature. It's never written to a file, logged, or sent anywhere. It's only read at the moment of unlocking, never in the background, so Glimpse can't trigger surprise Keychain prompts. The app checks the password against your account (OpenDirectory) before saving, so it never types a wrong one.
+- **Your password:** apps like this all need your password, because typing it is the only way to unlock. Glimpse stores it only in **your login Keychain**, limited to this app's code signature. It's never written to a file, logged, or sent anywhere. It's only read at the moment of unlocking, never in the background, so Glimpse can't trigger surprise Keychain prompts. Every keystroke is sent only while the lock screen is showing: if the Mac gets unlocked any other way (Touch ID, typing it yourself), Glimpse stops immediately and never presses Return, so the password can't end up in another app. The app checks the password against your account (OpenDirectory) before saving, so it never types a wrong one.
 - **Not as strong as Face ID:** Macs don't have the iPhone's 3D depth camera. Recognition uses the regular webcam and Vision feature prints, which aren't designed for identity checks. Someone who looks like you, or a good photo or video of you, *might* get through. To reduce that risk:
   - Use the **Test** tab to set the strictness slider as strict as still works for you. The scale goes from **Very strict** (0.8) through **Strict**, **Balanced** (default 1.3) and **Relaxed** to **Lenient** (2.0).
   - Turn on **Also require a blink** (off by default) to make photos much harder to use. Set the strength to **Hard** for the most protection, since a quick flicker in a video won't count.
@@ -175,7 +172,8 @@ This:
 | --- | --- |
 | "Glimpse" Not Opened / "Apple could not verify…" | See [Fixing "Glimpse Not Opened"](#fixing-glimpse-not-opened). |
 | "Accessibility not allowed" even though it's switched on | The switch belongs to an older copy of the app. In **Settings**, click **Fix & Allow**, then turn Glimpse on again. |
-| "Allow access to your saved password" / Keychain prompts after updating | Normal once per update. See [After an update](#after-an-update-allow-access-to-your-saved-password). The easiest fix is to enter your password again in the **Password** tab. |
+| "Re-enter your password after the update" | Normal once per update. See [After an update](#after-an-update-re-enter-your-password-once). |
+| Screen goes black after Face ID recognizes you (1.3 and earlier) | Fixed in 1.4: update. Older versions could wait on a Keychain prompt that can't appear at the lock screen. |
 | Opening Glimpse seems to do nothing / "loading forever" | Update to 1.2 or later: opening Glimpse now always shows Settings. On older versions, use the menu bar icon (it may be hidden behind the notch). |
 | No animation on the lock screen | Choose **Show Log** from the menu bar icon and look for `Scan skipped` (it says what's missing) or `SkyLight` errors. |
 | Doesn't recognize you | In **Faces**, click **Add Samples** in the lighting you usually use, or move the slider toward Lenient. |

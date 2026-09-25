@@ -75,12 +75,27 @@ enum Keychain {
         return String(data: data, encoding: .utf8)
     }
 
-    /// Asks macOS for access right now (the user is present). Returns true if access was allowed.
-    static func requestAccess() -> Bool {
-        guard load() != nil else { return false }
-        markGranted(true)
-        Log.write("Keychain access allowed for this build")
-        return true
+    /// Like `load()`, but gives up after `timeout` seconds. A result that arrives later is thrown away,
+    /// so a read that was stuck behind a Keychain prompt can never trigger typing later on.
+    static func load(timeout: TimeInterval) -> String? {
+        final class Box { let lock = NSLock(); var value: String?; var expired = false }
+        let box = Box()
+        let done = DispatchSemaphore(value: 0)
+        DispatchQueue.global(qos: .userInitiated).async {
+            let v = load()
+            box.lock.lock()
+            if !box.expired { box.value = v }
+            box.lock.unlock()
+            done.signal()
+        }
+        if done.wait(timeout: .now() + timeout) == .timedOut {
+            box.lock.lock(); box.expired = true; box.lock.unlock()
+            markGranted(false)
+            Log.write("Keychain read timed out (macOS wanted to ask for access); password must be re-entered")
+            return nil
+        }
+        box.lock.lock(); defer { box.lock.unlock() }
+        return box.value
     }
 
     /// Only checks that an item exists (attributes only, never prompts).
@@ -130,27 +145,40 @@ enum Unlocker {
     }
 
     /// Types the stored password into the lock screen and presses Return. Tries once per call.
+    ///
+    /// Safety: every keystroke is sent only while the screen is still locked. If you unlock the Mac
+    /// yourself (or anything else unlocks it) at any point, typing stops immediately and Return is
+    /// never pressed, so the password can never end up in another app.
     static func unlock() {
+        guard LockMonitor.screenIsLocked else { Log.write("Unlock skipped: screen is not locked"); return }
         guard hasAccessibility else { Log.write("Unlock aborted: Accessibility permission missing"); return }
-        guard Keychain.accessGranted else { Log.write("Unlock aborted: Keychain access not allowed for this build yet"); return }
-        guard var password = Keychain.load() else { Log.write("Unlock aborted: password unavailable"); return }
-        Log.write("Typing password at lock screen")
+        guard Keychain.accessGranted else { Log.write("Unlock aborted: password needs to be re-entered after an update"); return }
 
         var assertion: IOPMAssertionID = 0
         IOPMAssertionDeclareUserActivity("Glimpse unlock" as CFString, kIOPMUserActiveLocal, &assertion)
 
         let map = KeyMap.current()
         DispatchQueue.global(qos: .userInteractive).async {
+            defer { if assertion != 0 { IOPMAssertionRelease(assertion) } }
+            // If macOS wanted to show a Keychain prompt it couldn't appear at the lock screen and the
+            // read would hang, so give up quickly instead of waiting.
+            guard var password = Keychain.load(timeout: 1.5) else {
+                Log.write("Unlock aborted: password unavailable")
+                return
+            }
+            defer { password = "" }
+
             let typer = KeyTyper(map: map)
             usleep(150_000)
+            guard LockMonitor.screenIsLocked else { Log.write("Unlock aborted: screen already unlocked"); return }
+            Log.write("Typing password at lock screen")
             // Clear anything already typed into the field (e.g. the key that woke the screen).
             typer.selectAllAndDelete()
             usleep(60_000)
             typer.type(password)
             usleep(40_000)
             typer.press(CGKeyCode(kVK_Return))
-            password = ""
-            if assertion != 0 { IOPMAssertionRelease(assertion) }
+            if typer.aborted { Log.write("Typing stopped: screen was unlocked while typing") }
         }
     }
 }
@@ -191,13 +219,22 @@ struct KeyMap {
     }
 }
 
-struct KeyTyper {
+final class KeyTyper {
     let map: KeyMap
     private let source = CGEventSource(stateID: .hidSystemState)
+    /// Set once the screen is found unlocked; after that no more keys are ever sent.
+    private(set) var aborted = false
 
     init(map: KeyMap) { self.map = map }
 
+    /// Only type while the lock screen is up.
+    private func mayType() -> Bool {
+        if !aborted && !LockMonitor.screenIsLocked { aborted = true }
+        return !aborted
+    }
+
     func press(_ code: CGKeyCode, flags: CGEventFlags = []) {
+        guard mayType() else { return }
         let down = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: true)
         let up = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: false)
         down?.flags = flags
@@ -217,6 +254,7 @@ struct KeyTyper {
 
     func type(_ text: String) {
         for ch in text {
+            guard mayType() else { return }
             if let (code, flags) = map.keys[ch] {
                 press(code, flags: flags)
             } else {

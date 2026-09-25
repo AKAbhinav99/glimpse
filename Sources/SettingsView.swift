@@ -338,7 +338,7 @@ struct PasswordTab: View {
             Label {
                 Text(!stored ? "No password stored yet."
                      : readable ? "Your password is stored in your login Keychain."
-                     : "Glimpse was updated — enter your password again (or allow access from the menu bar icon).")
+                     : "Glimpse was updated — enter your password again below.")
                     .font(.headline)
             } icon: {
                 Image(systemName: stored && readable ? "lock.shield.fill" : "lock.open")
