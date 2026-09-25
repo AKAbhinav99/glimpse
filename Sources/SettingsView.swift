@@ -221,19 +221,69 @@ struct FacesTab: View {
 final class TestModel: ObservableObject {
     @Published var info = ScanInfo()
     @Published var running = false
+    @Published var recentBlink = false
     let scanner = FaceScanner()
+    private var lastBlinkCount = 0
+    private var blinkClear: DispatchWorkItem?
 
     func start() {
-        scanner.onUpdate = { [weak self] in self?.info = $0 }
+        lastBlinkCount = 0
+        scanner.onUpdate = { [weak self] info in
+            guard let self else { return }
+            self.info = info
+            if info.blinkCount > self.lastBlinkCount {
+                self.lastBlinkCount = info.blinkCount
+                self.recentBlink = true
+                self.blinkClear?.cancel()
+                let work = DispatchWorkItem { [weak self] in self?.recentBlink = false }
+                self.blinkClear = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: work)
+            }
+        }
         scanner.start(timeout: nil, requireBlink: false, stopOnMatch: false)
         running = true
     }
-    func stop() { scanner.stop(); running = false; info = ScanInfo() }
+
+    /// Picks up a new blink strength without the user having to stop/start the camera.
+    func restartIfRunning() {
+        guard running else { return }
+        scanner.stop()
+        start()
+    }
+
+    func stop() { scanner.stop(); running = false; recentBlink = false; info = ScanInfo() }
+}
+
+/// Live eye-openness bar with a tick where a blink starts counting for the chosen strength.
+struct EyeMeter: View {
+    var openness: CGFloat?
+    var threshold: CGFloat?
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.secondary.opacity(0.2))
+                if let o = openness {
+                    Capsule()
+                        .fill(threshold.map { o < $0 } == true ? Color.green : Color.accentColor)
+                        .frame(width: max(6, w * o))
+                        .animation(.linear(duration: 0.08), value: o)
+                }
+                if let t = threshold {
+                    Rectangle().fill(Color.primary).frame(width: 2, height: 14).offset(x: w * t - 1)
+                }
+            }
+        }
+        .frame(width: 130, height: 8)
+        .help("Bar = how open your eyes are. A blink counts when it drops past the line and opens again.")
+    }
 }
 
 struct TestTab: View {
     @StateObject private var model = TestModel()
     @AppStorage(Prefs.strictness) private var strictness = 1.6
+    @AppStorage(Prefs.blinkStrength) private var blinkStrength = BlinkStrength.regular.rawValue
 
     var body: some View {
         HStack(alignment: .top, spacing: 24) {
@@ -248,7 +298,12 @@ struct TestTab: View {
                 row("Best match", model.info.match?.profile.name ?? "—")
                 row("Score", model.info.match.map { String(format: "%.2f", $0.ratio) } ?? "—")
                 row("Limit", String(format: "≤ %.2f", strictness))
-                row("Blink", model.info.blinked ? "Seen ✓" : "Not yet")
+                HStack {
+                    Text("Eyes").foregroundStyle(.secondary).frame(width: 90, alignment: .leading)
+                    EyeMeter(openness: model.info.eyeOpenness, threshold: model.info.blinkThreshold)
+                }
+                row("Blink (\((BlinkStrength(rawValue: blinkStrength) ?? .regular).title))",
+                    model.recentBlink ? "Seen ✓" : "Not yet")
                 HStack {
                     Image(systemName: model.info.isMatch ? "checkmark.circle.fill" : "xmark.circle")
                         .foregroundStyle(model.info.isMatch ? .green : .secondary)
@@ -261,6 +316,7 @@ struct TestTab: View {
             }
         }
         .onDisappear { model.stop() }
+        .onChange(of: blinkStrength) { _, _ in model.restartIfRunning() }
     }
 
     private func row(_ k: String, _ v: String) -> some View {
@@ -330,6 +386,7 @@ struct GeneralTab: View {
     @AppStorage(Prefs.strictness) private var strictness = 1.6
     @AppStorage(Prefs.requireBlink) private var requireBlink = false
     @AppStorage(Prefs.minLockSeconds) private var minLock = 3.0
+    @AppStorage(Prefs.blinkStrength) private var blinkStrength = BlinkStrength.regular.rawValue
     @State private var loginItem = SMAppService.mainApp.status == .enabled
     @State private var cameraOK = Camera.authorization == .authorized
     @State private var axOK = Unlocker.hasAccessibility
@@ -357,6 +414,16 @@ struct GeneralTab: View {
                     Text("Start scanning \(Int(minLock))s after the lock screen appears")
                 }
                 Toggle("Also require a blink (optional — harder to fool with a photo)", isOn: $requireBlink)
+                VStack(alignment: .leading, spacing: 4) {
+                    Picker("Blink strength", selection: $blinkStrength) {
+                        ForEach(BlinkStrength.allCases) { Text($0.title).tag($0.rawValue) }
+                    }
+                    .pickerStyle(.segmented)
+                    Text("Light: any normal blink. Regular: a clear blink. Hard: squeeze your eyes shut for a moment — hardest to fake. Try it in the Test tab.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+                .disabled(!requireBlink)
+                .opacity(requireBlink ? 1 : 0.5)
             }
             Section("Permissions") {
                 HStack {

@@ -1,4 +1,5 @@
 import AVFoundation
+import QuartzCore
 import Vision
 
 struct ScanInfo {
@@ -6,6 +7,10 @@ struct ScanInfo {
     var match: MatchResult?
     var isMatch = false
     var blinked = false
+    var blinkCount = 0
+    /// Eye openness relative to normal (1 = fully open) and the level a blink must reach, for live feedback.
+    var eyeOpenness: CGFloat?
+    var blinkThreshold: CGFloat?
 }
 
 enum Prefs {
@@ -13,17 +18,22 @@ enum Prefs {
     static let strictness = "strictness"         // max distance ratio accepted
     static let requireBlink = "requireBlink"
     static let minLockSeconds = "minLockSeconds"
+    static let blinkStrength = "blinkStrength"
 
     static func register() {
         let d = UserDefaults.standard
         d.register(defaults: [
             enabled: true, strictness: 1.6, requireBlink: false, minLockSeconds: 3.0,
+            blinkStrength: BlinkStrength.regular.rawValue,
         ])
         // v1 defaulted to requiring a blink; scanning is now fully automatic unless you opt in.
         if !d.bool(forKey: "migratedV2") {
             d.set(false, forKey: requireBlink)
             d.set(true, forKey: "migratedV2")
         }
+    }
+    static var strength: BlinkStrength {
+        BlinkStrength(rawValue: UserDefaults.standard.string(forKey: blinkStrength) ?? "") ?? .regular
     }
     static var threshold: Float { Float(UserDefaults.standard.double(forKey: strictness)) }
 }
@@ -57,7 +67,7 @@ final class FaceScanner {
         self.requireBlink = requireBlink
         consecutive = 0
         lastID = nil
-        blink = BlinkTracker()
+        blink = BlinkTracker(strength: Prefs.strength)
         lock.unlock()
         camera.onFrame = { [weak self] pb in self?.process(pb) }
         camera.start()
@@ -85,7 +95,7 @@ final class FaceScanner {
         var info = ScanInfo()
         if let sample = engine.analyze(pb) {
             info.faceFound = true
-            if let e = sample.eyeOpenness { blink.feed(e) }
+            if let e = sample.eyeOpenness { blink.feed(e, at: CACurrentMediaTime()) }
             if let p = sample.print, let m = FaceStore.shared.match(p) {
                 info.match = m
                 if m.ratio <= Prefs.threshold {
@@ -101,6 +111,11 @@ final class FaceScanner {
             consecutive = 0
         }
         info.blinked = blink.blinked
+        info.blinkCount = blink.blinkCount
+        if info.faceFound {
+            info.eyeOpenness = blink.relativeOpenness
+            info.blinkThreshold = blink.strength.closeRatio
+        }
         info.isMatch = consecutive >= 3
 
         let succeeded = info.isMatch && (!requireBlink || blink.blinked)

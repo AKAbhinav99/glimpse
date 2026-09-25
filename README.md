@@ -14,7 +14,7 @@ It's an open, local-only alternative to apps like Glance. You can read every lin
 - **Automatic scanning:** scanning starts when the lock screen appears, when the display wakes, or when you touch the keyboard or trackpad while locked. You don't need to click or blink.
 - **Dynamic Island animation:** on Macs with a notch, the notch expands into a black panel. The Face ID icon looks around while scanning, turns into a spinning ring, draws a checkmark, and then shrinks back. If recognition fails, the panel shakes. On Macs without a notch, a pill drops in from the top of the screen.
 - **Test mode:** a live camera view shows your match score against the limit, so you can check that other people (and photos) are rejected.
-- **Adjustable strictness:** a Strict ↔ Lenient slider, an optional blink check, and a delay before scanning starts.
+- **Adjustable strictness:** a Strict ↔ Lenient slider, an optional blink check with three strengths (**Light**, **Regular**, **Hard**), and a delay before scanning starts.
 - **Local only:** no network code at all. Face data and settings never leave your Mac.
 - **Diagnostic log:** `~/Library/Logs/Glimpse.log` records lock and scan events. It never contains images or your password.
 
@@ -73,7 +73,19 @@ Apps you build on your own Mac aren't marked as downloaded, so this warning neve
 | **Faces** | Click **Set Up a Face…**, enter a name, and slowly move your head until the ring fills. |
 | **Password** | Enter your Mac login password. Glimpse checks it's correct before saving it (see [Security](#security)). |
 | **Settings** | Allow **Camera** and **Accessibility**, and turn on **Open Glimpse at login**. |
-| **Test** | Check that you're recognized. Then try someone else, or a photo of you; they should stay above the limit. |
+| **Test** | Check that you're recognized. Then try someone else, or a photo of you; they should stay above the limit. The **Eyes** bar shows how open your eyes are, so you can check that your blink registers. |
+
+### Blink check (optional)
+
+Blinking is **off by default**, and Glimpse unlocks as soon as it recognizes you. If you want extra protection against photos, turn on **Also require a blink** in the **Settings** tab and choose how strong the blink has to be:
+
+| Strength | What counts | Good for |
+| --- | --- | --- |
+| **Light** | Any normal blink, even a small one | Convenience; works best with glasses or in dim light |
+| **Regular** (default) | A clear, normal blink | A good balance |
+| **Hard** | Squeezing your eyes shut for about ⅕ of a second | The strongest protection; a quick natural blink won't count |
+
+Try each one in the **Test** tab. The Eyes bar has to drop past the line and come back up for a blink to count. When a blink is required, the lock screen shows *"Blink to unlock"*, or *"Blink firmly to unlock"* on Hard.
 
 The menu bar icon shows **✓ Ready** once everything is set up. Otherwise it lists what's missing.
 
@@ -109,7 +121,7 @@ Please read this before using it.
 - **Your password:** apps like this all need your password, because typing it is the only way to unlock. Glimpse stores it only in **your login Keychain**, limited to this app's code signature. It's never written to a file, logged, or sent anywhere, and it's only read at the moment of unlocking. The app checks the password against your account (OpenDirectory) before saving, so it never types a wrong one.
 - **Not as strong as Face ID:** Macs don't have the iPhone's 3D depth camera. Recognition uses the regular webcam and Vision feature prints, which aren't designed for identity checks. Someone who looks like you, or a good photo or video of you, *might* get through. To reduce that risk:
   - Use the **Test** tab to set the strictness slider as strict as still works for you.
-  - Turn on **Require a blink** (off by default) to make photos much harder to use.
+  - Turn on **Also require a blink** (off by default) to make photos much harder to use. Set the strength to **Hard** for the most protection, since a quick flicker in a video won't count.
   - Don't rely on Glimpse where strong security matters.
 - **Face data:** stored as feature prints (not photos) in `~/Library/Application Support/Glimpse/Faces`, readable only by your user account.
 - **Limits on attempts:** up to 4 automatic scans per lock (the count resets when the screen wakes), each lasting about 8 seconds. After a successful unlock it won't scan again until the next lock.
@@ -139,6 +151,7 @@ This:
 | No animation on the lock screen | Choose **Show Log** from the menu bar icon and look for `Scan skipped` (it says what's missing) or `SkyLight` errors. |
 | Doesn't recognize you | In **Faces**, click **Add Samples** in the lighting you usually use, or move the slider toward Lenient. |
 | Recognizes someone else | Move the slider toward Strict and turn on the blink check. |
+| Blink isn't detected | Use the **Test** tab to watch the Eyes bar. Choose a lighter blink strength, or add face samples in better light. |
 | Changed your Mac password | Update it in the **Password** tab. |
 
 ## Project layout

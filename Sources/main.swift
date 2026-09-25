@@ -75,6 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !preview { attempts += 1 }
 
         let requireBlink = d.bool(forKey: Prefs.requireBlink)
+        overlay.model.blinkCaption = Prefs.strength.caption
         overlay.model.phase = .scanning
         overlay.model.name = ""
         overlay.show()

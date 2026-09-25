@@ -87,18 +87,62 @@ final class FaceEngine {
     private func area(_ r: CGRect) -> CGFloat { r.width * r.height }
 }
 
+/// How strong a blink has to be before it counts.
+enum BlinkStrength: String, CaseIterable, Identifiable {
+    case light, regular, hard
+    var id: String { rawValue }
+
+    /// Eyes count as closed below this fraction of the person's normal open-eye height.
+    var closeRatio: CGFloat {
+        switch self {
+        case .light: return 0.72
+        case .regular: return 0.60
+        case .hard: return 0.40
+        }
+    }
+
+    /// How long the eyes must stay shut. A hard blink has to be a squeeze, not a flicker.
+    var minClosed: TimeInterval { self == .hard ? 0.20 : 0 }
+
+    var title: String {
+        switch self {
+        case .light: return "Light"
+        case .regular: return "Regular"
+        case .hard: return "Hard"
+        }
+    }
+
+    var caption: String { self == .hard ? "Blink firmly to unlock" : "Blink to unlock" }
+}
+
 /// Detects a blink (open → closed → open) relative to the person's own open-eye baseline.
 struct BlinkTracker {
+    let strength: BlinkStrength
     private var baseline: CGFloat = 0
     private var samples = 0
-    private var closed = false
-    private(set) var blinked = false
+    private var closedAt: TimeInterval?
+    private(set) var blinkCount = 0
+    private(set) var lastOpenness: CGFloat?
 
-    mutating func feed(_ e: CGFloat) {
+    init(strength: BlinkStrength = .regular) { self.strength = strength }
+
+    var blinked: Bool { blinkCount > 0 }
+
+    /// Current openness as a fraction of the baseline (1 = fully open), for live feedback.
+    var relativeOpenness: CGFloat? {
+        guard let e = lastOpenness, baseline > 0, samples >= 4 else { return nil }
+        return min(e / baseline, 1)
+    }
+
+    mutating func feed(_ e: CGFloat, at t: TimeInterval) {
+        lastOpenness = e
         baseline = max(e, baseline * 0.995)
         samples += 1
         guard samples >= 4, baseline > 0 else { return }
-        if !closed && e < baseline * 0.6 { closed = true }
-        if closed && e > baseline * 0.8 { closed = false; blinked = true }
+        if closedAt == nil && e < baseline * strength.closeRatio { closedAt = t }
+        if let start = closedAt, e > baseline * 0.8 {
+            if t - start >= strength.minClosed { blinkCount += 1 }
+            closedAt = nil
+        }
     }
 }

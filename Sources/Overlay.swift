@@ -46,6 +46,7 @@ final class OverlayModel: ObservableObject {
     enum Phase { case scanning, blink, success, failed }
     @Published var phase: Phase = .scanning
     @Published var name: String = ""
+    @Published var blinkCaption = BlinkStrength.regular.caption
     @Published var expanded = false
     /// Size of the camera notch on the screen we're shown on; `.zero` when there is no notch.
     @Published var notchSize: CGSize = .zero
@@ -177,7 +178,7 @@ struct IslandView: View {
     private var caption: String {
         switch model.phase {
         case .scanning: return "Face ID"
-        case .blink: return "Blink to unlock"
+        case .blink: return model.blinkCaption
         case .success: return model.name.isEmpty ? "Unlocked" : "Hi, \(model.name)"
         case .failed: return "Face Not Recognized"
         }
