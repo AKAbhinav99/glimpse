@@ -26,6 +26,33 @@ It's an open, local-only alternative to apps like Glance. You can read every lin
 
 > **Seeing "Glimpse" Not Opened?** That's expected the first time. See [Fixing "Glimpse Not Opened"](#fixing-glimpse-not-opened) below.
 
+### Install or update with one command
+
+Paste this into Terminal. It quits Glimpse if it's running, downloads the **latest** release, replaces the copy in Applications, and opens it. Because it downloads with Terminal, the "Glimpse Not Opened" warning doesn't appear.
+
+```bash
+osascript -e 'quit app "Glimpse"' 2>/dev/null; curl -fL -o /tmp/Glimpse.dmg https://github.com/AKAbhinav99/glimpse/releases/latest/download/Glimpse.dmg && hdiutil attach -nobrowse -quiet /tmp/Glimpse.dmg -mountpoint /tmp/GlimpseDMG && rm -rf /Applications/Glimpse.app && cp -R /tmp/GlimpseDMG/Glimpse.app /Applications/ && hdiutil detach -quiet /tmp/GlimpseDMG && xattr -dr com.apple.quarantine /Applications/Glimpse.app && open /Applications/Glimpse.app
+```
+
+Your faces and settings are kept when you update.
+
+### After an update: allow access to your saved password
+
+Glimpse isn't signed with a paid Apple Developer ID, so macOS links your saved password to the exact version of the app that saved it. After each update, Glimpse shows **"Allow Glimpse to use your saved password"** once:
+
+- **Enter Password Again** (easiest): type your Mac password in the **Password** tab and click **Replace**.
+- **Continue**: macOS asks for your login keychain password. Type your Mac password and click **Always Allow** (not just *Allow*).
+
+Until you do one of these, Glimpse won't try to unlock, and it never shows Keychain prompts in the background or at the lock screen. You can also do this later from the menu bar icon (**⚠︎ Allow access to your saved password**).
+
+### Opening Settings
+
+Glimpse lives in the menu bar and has no Dock icon. To open Settings, either:
+- click the face icon in the menu bar and choose **Settings…**, or
+- open **Glimpse** from Applications, Launchpad or Spotlight. The Settings window appears even if Glimpse is already running.
+
+> On MacBooks with a notch, menu bar icons can be hidden behind the notch when the menu bar is full. If you can't see the face icon, open Glimpse from Applications instead.
+
 ## Fixing "Glimpse Not Opened"
 
 The first time you open Glimpse, macOS may show:
@@ -93,6 +120,7 @@ Menu bar options:
 - **Face Unlock**: turn the feature on or off
 - **Play Unlock Animation**: demo of the animation without using the camera
 - **Preview Lock Scan**: a real camera scan with the animation, without unlocking
+- **⚠︎ items**: anything that still needs setting up. Click one to fix it.
 - **Settings…**, **Show Log**, **Quit**
 
 ## How it works
@@ -118,7 +146,7 @@ Dynamic Island animation     Unlocker types your password
 
 Please read this before using it.
 
-- **Your password:** apps like this all need your password, because typing it is the only way to unlock. Glimpse stores it only in **your login Keychain**, limited to this app's code signature. It's never written to a file, logged, or sent anywhere, and it's only read at the moment of unlocking. The app checks the password against your account (OpenDirectory) before saving, so it never types a wrong one.
+- **Your password:** apps like this all need your password, because typing it is the only way to unlock. Glimpse stores it only in **your login Keychain**, limited to this app's code signature. It's never written to a file, logged, or sent anywhere. It's only read at the moment of unlocking, never in the background, so Glimpse can't trigger surprise Keychain prompts. The app checks the password against your account (OpenDirectory) before saving, so it never types a wrong one.
 - **Not as strong as Face ID:** Macs don't have the iPhone's 3D depth camera. Recognition uses the regular webcam and Vision feature prints, which aren't designed for identity checks. Someone who looks like you, or a good photo or video of you, *might* get through. To reduce that risk:
   - Use the **Test** tab to set the strictness slider as strict as still works for you.
   - Turn on **Also require a blink** (off by default) to make photos much harder to use. Set the strength to **Hard** for the most protection, since a quick flicker in a video won't count.
@@ -147,7 +175,8 @@ This:
 | --- | --- |
 | "Glimpse" Not Opened / "Apple could not verify…" | See [Fixing "Glimpse Not Opened"](#fixing-glimpse-not-opened). |
 | "Accessibility not allowed" even though it's switched on | The switch belongs to an older copy of the app. In **Settings**, click **Fix & Allow**, then turn Glimpse on again. |
-| "Re-enter your password" | The password was saved by an older copy of the app. Enter it again in the **Password** tab. |
+| "Allow access to your saved password" / Keychain prompts after updating | Normal once per update. See [After an update](#after-an-update-allow-access-to-your-saved-password). The easiest fix is to enter your password again in the **Password** tab. |
+| Opening Glimpse seems to do nothing / "loading forever" | Update to 1.2 or later: opening Glimpse now always shows Settings. On older versions, use the menu bar icon (it may be hidden behind the notch). |
 | No animation on the lock screen | Choose **Show Log** from the menu bar icon and look for `Scan skipped` (it says what's missing) or `SkyLight` errors. |
 | Doesn't recognize you | In **Faces**, click **Add Samples** in the lighting you usually use, or move the slider toward Lenient. |
 | Recognizes someone else | Move the slider toward Strict and turn on the blink check. |
@@ -177,7 +206,7 @@ build.sh
 
 1. Quit Glimpse from the menu bar and delete it from Applications.
 2. Delete `~/Library/Application Support/Glimpse`, `~/Library/Application Support/Glimpse-Signing`, and `~/Library/Logs/Glimpse.log`.
-3. In Keychain Access, delete the item **"Glimpse unlock password"**.
+3. In Keychain Access, search for **"Glimpse unlock password"** and delete every item it finds (re-saving the password creates a new item).
 4. Remove Glimpse under System Settings → Privacy & Security → Camera / Accessibility.
 
 ## License

@@ -329,7 +329,7 @@ struct TestTab: View {
 struct PasswordTab: View {
     @State private var password = ""
     @State private var stored = Keychain.exists
-    @State private var readable = Keychain.readableWithoutPrompt
+    @State private var readable = Keychain.accessGranted
     @State private var message = ""
     @State private var error = false
 
@@ -338,7 +338,7 @@ struct PasswordTab: View {
             Label {
                 Text(!stored ? "No password stored yet."
                      : readable ? "Your password is stored in your login Keychain."
-                     : "Please enter your password again (it was saved by an older version).")
+                     : "Glimpse was updated — enter your password again (or allow access from the menu bar icon).")
                     .font(.headline)
             } icon: {
                 Image(systemName: stored && readable ? "lock.shield.fill" : "lock.open")
@@ -372,7 +372,7 @@ struct PasswordTab: View {
             message = "That isn't the password for \(NSUserName())."; error = true; return
         }
         stored = Keychain.save(password)
-        readable = Keychain.readableWithoutPrompt
+        readable = Keychain.accessGranted
         password = ""
         message = stored ? "Saved to Keychain." : "Couldn't save to Keychain."
         error = !stored

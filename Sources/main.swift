@@ -8,7 +8,7 @@ enum Setup {
         var p: [String] = []
         if FaceStore.shared.profiles.isEmpty { p.append("Set up a face (Faces tab)") }
         if !Keychain.exists { p.append("Save your Mac password (Password tab)") }
-        else if !Keychain.readableWithoutPrompt { p.append("Re-enter your password (Password tab)") }
+        else if !Keychain.accessGranted { p.append("Allow access to your saved password") }
         if Camera.authorization != .authorized { p.append("Allow Camera (Settings tab)") }
         if !Unlocker.hasAccessibility { p.append("Allow Accessibility (Settings tab)") }
         return p
@@ -49,11 +49,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         monitor.start()
 
-        let problems = Setup.problems
+        if Keychain.exists && !Keychain.accessGranted {
+            DispatchQueue.main.async { self.askForKeychainAccess() }
+        }
+
+        let problems = Setup.problems.filter { !$0.hasPrefix("Allow access") }
         if !problems.isEmpty {
             Log.write("Setup incomplete: \(problems.joined(separator: "; "))")
-            openSettings()
         }
+        // Opened by you (not automatically at login right after startup) => show Settings.
+        let launchedAtStartup = ProcessInfo.processInfo.systemUptime < 180
+        if !problems.isEmpty || !launchedAtStartup { openSettings() }
+    }
+
+    /// Opening Glimpse again (Applications, Launchpad, Spotlight) while it's running shows Settings.
+    /// Without this nothing appears, because Glimpse only lives in the menu bar.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        openSettings()
+        return true
     }
 
     // MARK: Scanning
@@ -139,7 +152,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(status)
         } else {
             for problem in problems {
-                menu.addItem(item("⚠︎ " + problem, #selector(openSettings)))
+                let action = problem.hasPrefix("Allow access") ? #selector(askForKeychainAccess) : #selector(openSettings)
+                menu.addItem(item("⚠︎ " + problem, action))
             }
         }
         menu.addItem(.separator())
@@ -185,8 +199,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             w.center()
             settingsWindow = w
         }
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         settingsWindow?.makeKeyAndOrderFront(nil)
+        settingsWindow?.orderFrontRegardless()
+    }
+
+    /// After an update macOS needs one approval before this build may read the saved password.
+    @objc func askForKeychainAccess() {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "Allow Glimpse to use your saved password"
+        alert.informativeText = """
+        Glimpse was updated, so macOS needs to confirm it can still read the password you saved.
+
+        Next, macOS will ask for your login keychain password. Type your Mac login password and click "Always Allow" (not just "Allow").
+
+        If that doesn't work, choose "Enter Password Again" instead.
+        """
+        alert.addButton(withTitle: "Continue")
+        alert.addButton(withTitle: "Enter Password Again")
+        alert.addButton(withTitle: "Later")
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            if !Keychain.requestAccess() {
+                let fail = NSAlert()
+                fail.messageText = "Access wasn't allowed"
+                fail.informativeText = "No problem — enter your Mac password again in the Password tab and Glimpse will save a fresh copy."
+                fail.runModal()
+                openSettings()
+            }
+        case .alertSecondButtonReturn:
+            openSettings()
+        default:
+            break
+        }
     }
 
     @objc private func showLog() {

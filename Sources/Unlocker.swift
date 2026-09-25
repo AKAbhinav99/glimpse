@@ -1,64 +1,99 @@
 import AppKit
 import Carbon
+import CryptoKit
 import IOKit.pwr_mgt
 import OpenDirectory
 import Security
 
 /// The unlock password lives only in your login Keychain, readable only by this app.
+///
+/// Without a paid Apple Developer ID, macOS ties Keychain access to the exact build that saved the
+/// password, so after an update macOS asks once before the new build may read it. To avoid surprise
+/// prompts (or prompt loops), Glimpse never reads the password in the background: it remembers which
+/// build has been granted access and only reads when unlocking, or when you explicitly allow access.
 enum Keychain {
     private static let service = "com.local.glimpse.unlock"
-    private static var account: String { NSUserName() }
+    private static let accountKey = "keychainAccount"
+    private static let grantedKey = "keychainGrantedBuild"
 
-    private static var base: [String: Any] {
+    /// Each save uses a fresh account name so saving never has to touch (and get prompted for) an older item.
+    private static var account: String {
+        UserDefaults.standard.string(forKey: accountKey) ?? NSUserName()
+    }
+
+    private static func query(_ account: String) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
          kSecAttrService as String: service,
          kSecAttrAccount as String: account]
     }
 
+    /// Fingerprint of this exact build of the app.
+    static let buildID: String = {
+        guard let url = Bundle.main.executableURL, let data = try? Data(contentsOf: url) else { return "unknown" }
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }()
+
+    /// This build has been allowed to read the password (so reading it at the lock screen won't prompt).
+    static var accessGranted: Bool {
+        exists && UserDefaults.standard.string(forKey: grantedKey) == buildID
+    }
+
+    private static func markGranted(_ granted: Bool) {
+        UserDefaults.standard.set(granted ? buildID : nil, forKey: grantedKey)
+    }
+
     @discardableResult
     static func save(_ password: String) -> Bool {
-        delete()
-        var q = base
+        let newAccount = "\(NSUserName())-\(Int(Date().timeIntervalSince1970))"
+        var q = query(newAccount)
         q[kSecValueData as String] = Data(password.utf8)
         q[kSecAttrLabel as String] = "Glimpse unlock password"
-        return SecItemAdd(q as CFDictionary, nil) == errSecSuccess
+        let status = SecItemAdd(q as CFDictionary, nil)
+        guard status == errSecSuccess else {
+            Log.write("Keychain save failed: \(status)")
+            return false
+        }
+        UserDefaults.standard.set(newAccount, forKey: accountKey)
+        markGranted(true)   // this build created it, so it can read it without asking
+        Log.write("Password saved to Keychain")
+        return true
     }
 
+    /// Reads the password. Only call this at unlock time (when `accessGranted`) or when the user
+    /// has just asked to allow access, because macOS may show its Keychain prompt.
     static func load() -> String? {
-        var q = base
+        var q = query(account)
         q[kSecReturnData as String] = true
         q[kSecMatchLimit as String] = kSecMatchLimitOne
-        var out: CFTypeRef?
-        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let data = out as? Data else { return nil }
-        return String(data: data, encoding: .utf8)
-    }
-
-    /// True when this app can read the password without macOS asking first
-    /// (a prompt at the lock screen would block unlocking).
-    static var readableWithoutPrompt: Bool { loadSilently() != nil }
-
-    static func loadSilently() -> String? {
-        var q = base
-        q[kSecReturnData as String] = true
-        q[kSecMatchLimit as String] = kSecMatchLimitOne
-        q[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail
         var out: CFTypeRef?
         let status = SecItemCopyMatching(q as CFDictionary, &out)
         guard status == errSecSuccess, let data = out as? Data else {
-            if status != errSecItemNotFound { Log.write("Keychain read without prompt failed: \(status)") }
+            Log.write("Keychain read failed: \(status)")
+            if status == errSecUserCanceled || status == errSecAuthFailed { markGranted(false) }
             return nil
         }
         return String(data: data, encoding: .utf8)
     }
 
+    /// Asks macOS for access right now (the user is present). Returns true if access was allowed.
+    static func requestAccess() -> Bool {
+        guard load() != nil else { return false }
+        markGranted(true)
+        Log.write("Keychain access allowed for this build")
+        return true
+    }
+
+    /// Only checks that an item exists (attributes only, never prompts).
     static var exists: Bool {
-        var q = base
+        var q = query(account)
         q[kSecReturnAttributes as String] = true
         return SecItemCopyMatching(q as CFDictionary, nil) == errSecSuccess
     }
 
     static func delete() {
-        SecItemDelete(base as CFDictionary)
+        SecItemDelete(query(account) as CFDictionary)
+        UserDefaults.standard.removeObject(forKey: accountKey)
+        markGranted(false)
     }
 }
 
@@ -97,7 +132,8 @@ enum Unlocker {
     /// Types the stored password into the lock screen and presses Return. Tries once per call.
     static func unlock() {
         guard hasAccessibility else { Log.write("Unlock aborted: Accessibility permission missing"); return }
-        guard var password = Keychain.loadSilently() else { Log.write("Unlock aborted: password unavailable"); return }
+        guard Keychain.accessGranted else { Log.write("Unlock aborted: Keychain access not allowed for this build yet"); return }
+        guard var password = Keychain.load() else { Log.write("Unlock aborted: password unavailable"); return }
         Log.write("Typing password at lock screen")
 
         var assertion: IOPMAssertionID = 0
