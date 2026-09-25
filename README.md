@@ -24,7 +24,47 @@ It's an open, local-only alternative to apps like Glance. You can read every lin
 2. Open the DMG and drag **Glimpse** into **Applications**.
 3. Open Glimpse. A face icon appears in the menu bar and the setup window opens.
 
-> The app is signed with a local self-signed certificate, not an Apple Developer ID. If macOS blocks a downloaded copy, right-click the app, choose **Open**, then **Open** again. Building it yourself avoids this.
+> **Seeing "Glimpse" Not Opened?** That's expected the first time. See [Fixing "Glimpse Not Opened"](#fixing-glimpse-not-opened) below.
+
+## Fixing "Glimpse Not Opened"
+
+The first time you open Glimpse, macOS may show:
+
+> **"Glimpse" Not Opened**
+> Apple could not verify "Glimpse" is free of malware that may harm your Mac or compromise your privacy.
+
+**Why this happens:** Apple only trusts apps automatically when the developer pays for an Apple Developer account ($99/year) and sends every build to Apple to be checked ("notarized"). Glimpse is a free, open-source project, so it isn't notarized. The warning doesn't mean anything was found in the app; it means Apple hasn't checked it. You can read all the code in this repo.
+
+**Don't click "Move to Trash".** Click **Done**, then use one of these fixes.
+
+### Option 1: Allow it in System Settings (recommended)
+
+1. Try to open **Glimpse** from Applications once, so the warning appears, then click **Done**.
+2. Open **System Settings → Privacy & Security**.
+3. Scroll down to the **Security** section. You'll see *"Glimpse" was blocked to protect your Mac.*
+4. Click **Open Anyway**.
+5. Enter your Mac password (or use Touch ID) when asked.
+6. Open Glimpse again and click **Open Anyway** in the final dialog.
+
+You only need to do this once. After that, Glimpse opens normally.
+
+> On macOS 14 (Sonoma) you can also right-click Glimpse in Applications, choose **Open**, then click **Open** again. From macOS 15 (Sequoia) onward, that shortcut was removed, so use the steps above.
+
+### Option 2: Use Terminal
+
+If you're comfortable with Terminal, this removes the "downloaded from the internet" flag from Glimpse only:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Glimpse.app
+```
+
+Then open Glimpse normally.
+
+### Option 3: Build it yourself
+
+Apps you build on your own Mac aren't marked as downloaded, so this warning never appears. See [Building from source](#building-from-source).
+
+> **Only do this for a copy you got from this repository** ([AKAbhinav99/glimpse](https://github.com/AKAbhinav99/glimpse)). Don't bypass this warning for copies from anywhere else.
 
 ## Setup
 
@@ -93,6 +133,7 @@ This:
 
 | Problem | Fix |
 | --- | --- |
+| "Glimpse" Not Opened / "Apple could not verify…" | See [Fixing "Glimpse Not Opened"](#fixing-glimpse-not-opened). |
 | "Accessibility not allowed" even though it's switched on | The switch belongs to an older copy of the app. In **Settings**, click **Fix & Allow**, then turn Glimpse on again. |
 | "Re-enter your password" | The password was saved by an older copy of the app. Enter it again in the **Password** tab. |
 | No animation on the lock screen | Choose **Show Log** from the menu bar icon and look for `Scan skipped` (it says what's missing) or `SkyLight` errors. |
