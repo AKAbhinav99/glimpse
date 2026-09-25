@@ -23,10 +23,13 @@ enum Prefs {
     static func register() {
         let d = UserDefaults.standard
         d.register(defaults: [
-            enabled: true, strictness: 1.6, requireBlink: false, minLockSeconds: 3.0,
+            enabled: true, strictness: 1.3, requireBlink: false, minLockSeconds: 3.0,
             blinkStrength: BlinkStrength.regular.rawValue,
         ])
         // v1 defaulted to requiring a blink; scanning is now fully automatic unless you opt in.
+        if d.double(forKey: strictness) > strictnessRange.upperBound {
+            d.set(strictnessRange.upperBound, forKey: strictness)
+        }
         if !d.bool(forKey: "migratedV2") {
             d.set(false, forKey: requireBlink)
             d.set(true, forKey: "migratedV2")
@@ -35,11 +38,30 @@ enum Prefs {
     static var strength: BlinkStrength {
         BlinkStrength(rawValue: UserDefaults.standard.string(forKey: blinkStrength) ?? "") ?? .regular
     }
-    static var threshold: Float { Float(UserDefaults.standard.double(forKey: strictness)) }
+    /// Slider range for the match limit (lower = stricter).
+    static let strictnessRange: ClosedRange<Double> = 0.8...2.0
+    /// Frames in a row the same face must match before unlocking.
+    static let framesRequired = 4
+
+    static var threshold: Float {
+        let v = UserDefaults.standard.double(forKey: strictness)
+        return Float(min(max(v, strictnessRange.lowerBound), strictnessRange.upperBound))
+    }
+
+    /// Human-readable name for a limit value.
+    static func strictnessName(_ v: Double) -> String {
+        switch v {
+        case ..<1.0: return "Very strict"
+        case ..<1.25: return "Strict"
+        case ..<1.5: return "Balanced"
+        case ..<1.75: return "Relaxed"
+        default: return "Lenient"
+        }
+    }
 }
 
 /// Runs the camera and decides when a face is recognised.
-/// Success = the same enrolled face matched on 3 consecutive frames (+ a blink when required).
+/// Success = the same enrolled face matched on `Prefs.framesRequired` consecutive frames (+ a blink when required).
 final class FaceScanner {
     private let camera = Camera()
     private let engine = FaceEngine()
@@ -116,7 +138,7 @@ final class FaceScanner {
             info.eyeOpenness = blink.relativeOpenness
             info.blinkThreshold = blink.strength.closeRatio
         }
-        info.isMatch = consecutive >= 3
+        info.isMatch = consecutive >= Prefs.framesRequired
 
         let succeeded = info.isMatch && (!requireBlink || blink.blinked)
         let profile = info.match?.profile

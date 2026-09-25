@@ -282,7 +282,7 @@ struct EyeMeter: View {
 
 struct TestTab: View {
     @StateObject private var model = TestModel()
-    @AppStorage(Prefs.strictness) private var strictness = 1.6
+    @AppStorage(Prefs.strictness) private var strictness = 1.3
     @AppStorage(Prefs.blinkStrength) private var blinkStrength = BlinkStrength.regular.rawValue
 
     var body: some View {
@@ -297,7 +297,7 @@ struct TestTab: View {
                 row("Face", model.info.faceFound ? "Detected" : "—")
                 row("Best match", model.info.match?.profile.name ?? "—")
                 row("Score", model.info.match.map { String(format: "%.2f", $0.ratio) } ?? "—")
-                row("Limit", String(format: "≤ %.2f", strictness))
+                row("Limit", String(format: "≤ %.2f (%@)", strictness, Prefs.strictnessName(strictness)))
                 HStack {
                     Text("Eyes").foregroundStyle(.secondary).frame(width: 90, alignment: .leading)
                     EyeMeter(openness: model.info.eyeOpenness, threshold: model.info.blinkThreshold)
@@ -383,7 +383,7 @@ struct PasswordTab: View {
 
 struct GeneralTab: View {
     @AppStorage(Prefs.enabled) private var enabled = true
-    @AppStorage(Prefs.strictness) private var strictness = 1.6
+    @AppStorage(Prefs.strictness) private var strictness = 1.3
     @AppStorage(Prefs.requireBlink) private var requireBlink = false
     @AppStorage(Prefs.minLockSeconds) private var minLock = 3.0
     @AppStorage(Prefs.blinkStrength) private var blinkStrength = BlinkStrength.regular.rawValue
@@ -404,10 +404,11 @@ struct GeneralTab: View {
             }
             Section("Security") {
                 VStack(alignment: .leading) {
-                    Slider(value: $strictness, in: 1.1...2.4) {
+                    Slider(value: $strictness, in: Prefs.strictnessRange) {
                         Text("Match limit")
                     } minimumValueLabel: { Text("Strict") } maximumValueLabel: { Text("Lenient") }
-                    Text(String(format: "Current limit: %.2f — use the Test tab to tune it.", strictness))
+                    Text(String(format: "%@ (limit %.2f). Lower is stricter — use the Test tab to find the strictest setting that still recognizes you.",
+                                Prefs.strictnessName(strictness), strictness))
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Stepper(value: $minLock, in: 0...30, step: 1) {

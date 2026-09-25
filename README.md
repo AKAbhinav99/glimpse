@@ -138,7 +138,7 @@ Dynamic Island animation     Unlocker types your password
 ```
 
 1. **Detecting the lock screen:** `LockMonitor` listens for the `com.apple.screenIsLocked` / `screenIsUnlocked` notifications and for screen wake. While locked, it checks keyboard and mouse idle time to notice when you come back.
-2. **Recognition:** `FaceEngine` uses Apple's Vision framework to find the largest face. It levels the eyes, crops the face, converts it to grayscale, and computes a `VNFeaturePrint`. `FaceStore` compares that with your enrolled samples. The score is a ratio against your own typical variation (worked out when you enroll), so **lower = more similar**. A frame counts as a match when the ratio is under the limit (default 1.6), and the same face has to match on 3 frames in a row.
+2. **Recognition:** `FaceEngine` uses Apple's Vision framework to find the largest face. It levels the eyes, crops the face, converts it to grayscale, and computes a `VNFeaturePrint`. `FaceStore` compares that with your enrolled samples. The score is a ratio against your own typical variation (worked out when you enroll), so **lower = more similar**. A frame counts as a match when the ratio is under the limit (default 1.3), and the same face has to match on 4 frames in a row.
 3. **Animation above the lock screen:** normal windows can't draw over the lock screen. `Overlay.swift` uses the private SkyLight window-server API (the same approach as [SkyLightWindow](https://github.com/Lakr233/SkyLightWindow)) to put the window on space level 400, which sits just above the lock screen (level 300).
 4. **Unlocking:** macOS has no public API for unlocking the screen. Glimpse, like Glance and every similar app, types your password into the lock screen and presses Return, using Accessibility access. It matches your keyboard layout, clears the field first, and tries only once per scan.
 
@@ -148,7 +148,7 @@ Please read this before using it.
 
 - **Your password:** apps like this all need your password, because typing it is the only way to unlock. Glimpse stores it only in **your login Keychain**, limited to this app's code signature. It's never written to a file, logged, or sent anywhere. It's only read at the moment of unlocking, never in the background, so Glimpse can't trigger surprise Keychain prompts. The app checks the password against your account (OpenDirectory) before saving, so it never types a wrong one.
 - **Not as strong as Face ID:** Macs don't have the iPhone's 3D depth camera. Recognition uses the regular webcam and Vision feature prints, which aren't designed for identity checks. Someone who looks like you, or a good photo or video of you, *might* get through. To reduce that risk:
-  - Use the **Test** tab to set the strictness slider as strict as still works for you.
+  - Use the **Test** tab to set the strictness slider as strict as still works for you. The scale goes from **Very strict** (0.8) through **Strict**, **Balanced** (default 1.3) and **Relaxed** to **Lenient** (2.0).
   - Turn on **Also require a blink** (off by default) to make photos much harder to use. Set the strength to **Hard** for the most protection, since a quick flicker in a video won't count.
   - Don't rely on Glimpse where strong security matters.
 - **Face data:** stored as feature prints (not photos) in `~/Library/Application Support/Glimpse/Faces`, readable only by your user account.
